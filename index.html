@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lnk.dev — URL Shortener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #7c6bff;
+    --accent2: #ff6b9d;
+    --accent3: #6bffce;
+    --text: #e8e8f0;
+    --muted: #666680;
+    --success: #6bffce;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Glow blobs */
+  .blob {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.12;
+    pointer-events: none;
+  }
+  .blob-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; right: -100px; animation: drift 20s ease-in-out infinite; }
+  .blob-2 { width: 400px; height: 400px; background: var(--accent2); bottom: 100px; left: -100px; animation: drift 25s ease-in-out infinite reverse; }
+  .blob-3 { width: 300px; height: 300px; background: var(--accent3); top: 50%; left: 50%; animation: drift 18s ease-in-out infinite 5s; }
+
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -30px) scale(1.05); }
+    66% { transform: translate(-20px, 20px) scale(0.95); }
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 48px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(20px);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -1px;
+  }
+  .logo span { color: var(--accent); }
+
+  .badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  nav { display: flex; gap: 8px; }
+  .nav-btn {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+  .nav-btn.ghost { background: transparent; color: var(--muted); }
+  .nav-btn.ghost:hover { color: var(--text); background: var(--surface2); }
+  .nav-btn.active { background: var(--accent); color: white; }
+
+  /* VIEWS */
+  .view { display: none; animation: fadeUp 0.4s ease; }
+  .view.active { display: block; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* HERO / SHORTENER */
+  .hero {
+    max-width: 720px;
+    margin: 80px auto 0;
+    padding: 0 24px;
+    text-align: center;
+  }
+
+  .hero-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: fadeUp 0.6s 0.1s forwards;
+  }
+
+  .hero h1 {
+    font-size: clamp(48px, 7vw, 80px);
+    font-weight: 800;
+    line-height: 1.0;
+    letter-spacing: -3px;
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: fadeUp 0.6s 0.2s forwards;
+  }
+
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero p {
+    color: var(--muted);
+    font-size: 17px;
+    line-height: 1.6;
+    margin-bottom: 48px;
+    opacity: 0;
+    animation: fadeUp 0.6s 0.3s forwards;
+  }
+
+  /* FORM */
+  .form-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    margin-bottom: 16px;
+    opacity: 0;
+    animation: fadeUp 0.6s 0.4s forwards;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+  }
+
+  input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%;
+  }
+
+  input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124,107,255,0.15);
+  }
+
+  input::placeholder { color: var(--muted); }
+
+  .btn-primary {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(124,107,255,0.4); }
+  .btn-primary:active { transform: translateY(0); }
+
+  /* RESULT CARD */
+  .result-card {
+    background: linear-gradient(135deg, rgba(124,107,255,0.1), rgba(255,107,157,0.05));
+    border: 1px solid rgba(124,107,255,0.3);
+    border-radius: 16px;
+    padding: 24px;
+    display: none;
+    animation: fadeUp 0.4s ease;
+  }
+
+  .result-card.show { display: block; }
+
+  .result-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .result-url-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+
+  .result-url {
+    flex: 1;
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .copy-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .copy-btn:hover { background: var(--accent); border-color: var(--accent); color: white; }
+  .copy-btn.copied { background: var(--accent3); border-color: var(--accent3); color: var(--bg); }
+
+  .result-meta {
+    display: flex;
+    gap: 24px;
+    font-size: 13px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .result-meta span { display: flex; align-items: center; gap: 6px; }
+
+  .qr-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+  }
+  .qr-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+
+  /* LINKS LIST */
+  .links-section {
+    max-width: 720px;
+    margin: 48px auto;
+    padding: 0 24px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .link-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    transition: border-color 0.2s, transform 0.2s;
+    cursor: pointer;
+  }
+
+  .link-card:hover { border-color: var(--accent); transform: translateX(4px); }
+
+  .link-info { flex: 1; min-width: 0; }
+
+  .link-short {
+    font-family: 'Space Mono', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .link-orig {
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 340px;
+  }
+
+  .link-stats {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .stat-pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .stat-pill.hot { border-color: var(--accent2); color: var(--accent2); }
+
+  .link-actions { display: flex; gap: 8px; }
+
+  .icon-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-btn.danger:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ANALYTICS VIEW */
+  .analytics-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  .analytics-header {
+    margin-bottom: 40px;
+  }
+
+  .analytics-header h2 {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    margin-bottom: 6px;
+  }
+
+  .analytics-header p {
+    color: var(--muted);
+    font-size: 14px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .range-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+    width: fit-content;
+  }
+
+  .range-tab {
+    padding: 6px 16px;
+    border-radius: 7px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+  .range-tab.active { background: var(--accent); color: white; }
+
+  /* STATS GRID */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-2px); }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .stat-card:nth-child(1)::before { background: var(--accent); }
+  .stat-card:nth-child(2)::before { background: var(--accent2); }
+  .stat-card:nth-child(3)::before { background: var(--accent3); }
+  .stat-card:nth-child(4)::before { background: #ffd166; }
+
+  .stat-icon {
+    font-size: 22px;
+    margin-bottom: 12px;
+  }
+
+  .stat-value {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-name {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-change {
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    margin-top: 8px;
+  }
+  .stat-change.up { color: var(--accent3); }
+  .stat-change.down { color: var(--accent2); }
+
+  /* CHARTS GRID */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .charts-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  .chart-title {
+    font-size: 13px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  canvas { max-width: 100%; }
+
+  /* PROGRESS BARS */
+  .bar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .bar-label {
+    font-size: 13px;
+    min-width: 80px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .bar-count {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* WORLD MAP placeholder */
+  .map-placeholder {
+    height: 160px;
+    background: var(--surface2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  .map-dots {
+    position: absolute;
+    inset: 0;
+  }
+
+  .map-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    transform: translate(-50%, -50%);
+  }
+
+  .map-dot::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.3;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(2); opacity: 0; }
+  }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    background: var(--surface);
+    border: 1px solid var(--accent3);
+    color: var(--accent3);
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    header { padding: 16px 20px; }
+    .hero { margin-top: 40px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .charts-grid { grid-template-columns: 1fr; }
+    .charts-grid-2 { grid-template-columns: 1fr; }
+    .input-row { flex-direction: column; }
+    .link-stats { display: none; }
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">lnk<span>.</span>dev</div>
+  <nav>
+    <button class="nav-btn active" onclick="showView('home')">Shorten</button>
+    <button class="nav-btn ghost" onclick="showView('analytics')">Analytics</button>
+  </nav>
+  <div class="badge">DEMO</div>
+</header>
+
+<!-- HOME VIEW -->
+<div class="view active" id="view-home">
+  <div class="hero">
+    <div class="hero-label">✦ URL Shortener with Analytics</div>
+    <h1>Short links.<br><em>Big data.</em></h1>
+    <p>Create short links, track clicks in real-time.<br>Know your audience — countries, devices, referrers.</p>
+  </div>
+
+  <div style="max-width:720px; margin: 0 auto; padding: 0 24px 80px;">
+    <div class="form-card">
+      <div class="input-row">
+        <div class="field" style="flex:3">
+          <label>Long URL</label>
+          <input type="url" id="urlInput" placeholder="https://your-very-long-link.com/goes/here" />
+        </div>
+        <div class="field" style="flex:1">
+          <label>Custom alias</label>
+          <input type="text" id="aliasInput" placeholder="my-link" />
+        </div>
+      </div>
+      <div class="input-row">
+        <div class="field" style="flex:1">
+          <label>Expires at (optional)</label>
+          <input type="date" id="expiresInput" />
+        </div>
+        <div class="field" style="flex:1">
+          <label>Password (optional)</label>
+          <input type="password" id="passInput" placeholder="••••••" />
+        </div>
+      </div>
+      <button class="btn-primary" onclick="shorten()">
+        ⚡ Shorten URL
+      </button>
+    </div>
+
+    <div class="result-card" id="resultCard">
+      <div class="result-label">✓ Your short link is ready</div>
+      <div class="result-url-row">
+        <span class="result-url" id="resultUrl">lnk.dev/abc123</span>
+        <button class="copy-btn" id="copyBtn" onclick="copyUrl()">Copy</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div class="result-meta" id="resultMeta"></div>
+        <button class="qr-btn" onclick="showToast('📱 QR code downloaded!')">⬛ Download QR</button>
+      </div>
+    </div>
+
+    <!-- Links list -->
+    <div class="links-section" style="padding:0; margin-top:40px;">
+      <div class="section-header">
+        <span class="section-title">— Recent links</span>
+        <button class="copy-btn" onclick="showView('analytics')">View analytics →</button>
+      </div>
+      <div id="linksList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ANALYTICS VIEW -->
+<div class="view" id="view-analytics">
+  <div class="analytics-wrap">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; flex-wrap:wrap; gap:16px;">
+      <div class="analytics-header" style="margin:0">
+        <h2>Analytics</h2>
+        <p>lnk.dev/typescript-docs · all time</p>
+      </div>
+      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <div class="range-tabs">
+          <button class="range-tab" onclick="setRange(this, 7)">7d</button>
+          <button class="range-tab active" onclick="setRange(this, 30)">30d</button>
+          <button class="range-tab" onclick="setRange(this, 90)">90d</button>
+        </div>
+        <button class="copy-btn" onclick="showToast('📥 CSV downloaded!')">↓ Export CSV</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">👆</div>
+        <div class="stat-value" id="statClicks">12,847</div>
+        <div class="stat-name">Total clicks</div>
+        <div class="stat-change up">↑ +18% vs prev period</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">👤</div>
+        <div class="stat-value" id="statUniq">4,219</div>
+        <div class="stat-name">Unique visitors</div>
+        <div class="stat-change up">↑ +12% vs prev period</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🌍</div>
+        <div class="stat-value">34</div>
+        <div class="stat-name">Countries</div>
+        <div class="stat-change up">↑ 3 new</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⚡</div>
+        <div class="stat-value">32%</div>
+        <div class="stat-name">CTR</div>
+        <div class="stat-change down">↓ -2% vs prev period</div>
+      </div>
+    </div>
+
+    <!-- Main charts -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">
+          Clicks over time
+          <span style="color:var(--accent); font-size:12px;">— 30 days</span>
+        </div>
+        <canvas id="timelineChart" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Devices</div>
+        <canvas id="devicesChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- Bottom charts -->
+    <div class="charts-grid-2">
+      <!-- Countries -->
+      <div class="chart-card">
+        <div class="chart-title">Top countries</div>
+        <div class="map-placeholder">
+          <div class="map-dots" id="mapDots"></div>
+        </div>
+        <div id="countriesList"></div>
+      </div>
+
+      <!-- Browsers -->
+      <div class="chart-card">
+        <div class="chart-title">Browsers</div>
+        <div id="browsersList" style="margin-top:8px;"></div>
+        <canvas id="browsersChart" height="160" style="margin-top:16px;"></canvas>
+      </div>
+
+      <!-- Referers -->
+      <div class="chart-card">
+        <div class="chart-title">Top referers</div>
+        <div id="referersList" style="margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span id="toastMsg">Copied!</span>
+</div>
+
+<script>
+// ─── MOCK DATA ───────────────────────────────────────────
+const mockLinks = [
+  { code: 'typescript-docs', url: 'https://www.typescriptlang.org/docs/handbook/intro.html', clicks: 4821, date: '2 days ago' },
+  { code: 'react-18',        url: 'https://react.dev/blog/2022/03/29/react-v18',             clicks: 3102, date: '5 days ago' },
+  { code: 'gh-profile',      url: 'https://github.com/V1nSky',                               clicks: 2290, date: '1 week ago' },
+  { code: 'my-resume',       url: 'https://example.com/resume/anatoly-kobelev.pdf',          clicks:  634, date: '2 weeks ago' },
+];
+
+const countries = [
+  { name: 'Russia 🇷🇺',  pct: 38, n: 4883 },
+  { name: 'Germany 🇩🇪', pct: 14, n: 1799 },
+  { name: 'USA 🇺🇸',     pct: 12, n: 1542 },
+  { name: 'Ukraine 🇺🇦', pct: 10, n: 1285 },
+  { name: 'France 🇫🇷',  pct:  7, n:  899 },
+];
+
+const browsers = [
+  { name: 'Chrome',  pct: 54, color: '#7c6bff' },
+  { name: 'Firefox', pct: 21, color: '#ff6b9d' },
+  { name: 'Safari',  pct: 17, color: '#6bffce' },
+  { name: 'Edge',    pct:  5, color: '#ffd166' },
+  { name: 'Other',   pct:  3, color: '#444466' },
+];
+
+const referers = [
+  { name: 'github.com',     n: 3241 },
+  { name: 't.me',           n: 2108 },
+  { name: 'Direct',         n: 4122 },
+  { name: 'twitter.com',    n:  987 },
+  { name: 'stackoverflow',  n:  389 },
+];
+
+const mapDotPositions = [
+  { top: '35%', left: '52%' }, // Russia
+  { top: '32%', left: '48%' }, // Germany
+  { top: '38%', left: '23%' }, // USA
+  { top: '36%', left: '54%' }, // Ukraine
+  { top: '34%', left: '47%' }, // France
+  { top: '55%', left: '65%' }, // India
+  { top: '45%', left: '80%' }, // Japan
+];
+
+// ─── RENDER LINKS ────────────────────────────────────────
+function renderLinks() {
+  const list = document.getElementById('linksList');
+  list.innerHTML = mockLinks.map(l => `
+    <div class="link-card" onclick="showView('analytics')">
+      <div class="link-info">
+        <div class="link-short">lnk.dev/${l.code}</div>
+        <div class="link-orig">→ ${l.url}</div>
+      </div>
+      <div class="link-stats">
+        <div class="stat-pill ${l.clicks > 3000 ? 'hot' : ''}">${l.clicks.toLocaleString()} clicks</div>
+        <div class="stat-pill">${l.date}</div>
+      </div>
+      <div class="link-actions">
+        <button class="icon-btn" onclick="event.stopPropagation(); copyLink('lnk.dev/${l.code}')">⎘</button>
+        <button class="icon-btn" onclick="event.stopPropagation(); showToast('📱 QR downloaded!')">▦</button>
+        <button class="icon-btn danger" onclick="event.stopPropagation(); showToast('🗑 Link deleted')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── SHORTEN ─────────────────────────────────────────────
+function shorten() {
+  const url = document.getElementById('urlInput').value.trim();
+  const alias = document.getElementById('aliasInput').value.trim();
+
+  if (!url) { showToast('⚠️ Please enter a URL'); return; }
+
+  try { new URL(url); } catch { showToast('⚠️ Invalid URL'); return; }
+
+  const btn = document.querySelector('.btn-primary');
+  btn.textContent = '⏳ Shortening...';
+  btn.disabled = true;
+
+  setTimeout(() => {
+    btn.textContent = '⚡ Shorten URL';
+    btn.disabled = false;
+
+    const code = alias || randomCode();
+    const shortUrl = `lnk.dev/${code}`;
+    const expires = document.getElementById('expiresInput').value;
+
+    document.getElementById('resultUrl').textContent = shortUrl;
+    document.getElementById('resultMeta').innerHTML = `
+      <span>🔗 ${url.length > 40 ? url.slice(0, 40) + '…' : url}</span>
+      ${expires ? `<span>⏰ expires ${expires}</span>` : ''}
+    `;
+
+    const card = document.getElementById('resultCard');
+    card.classList.add('show');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // Add to list
+    mockLinks.unshift({ code, url, clicks: 0, date: 'just now' });
+    renderLinks();
+
+    document.getElementById('urlInput').value = '';
+    document.getElementById('aliasInput').value = '';
+    document.getElementById('expiresInput').value = '';
+    document.getElementById('passInput').value = '';
+
+    showToast('✓ Link created!');
+  }, 800);
+}
+
+function randomCode() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+// ─── COPY ────────────────────────────────────────────────
+function copyUrl() {
+  const url = document.getElementById('resultUrl').textContent;
+  copyLink(url);
+  const btn = document.getElementById('copyBtn');
+  btn.textContent = '✓ Copied!';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+}
+
+function copyLink(text) {
+  navigator.clipboard?.writeText(text).catch(() => {});
+  showToast('✓ Copied to clipboard!');
+}
+
+// ─── VIEWS ───────────────────────────────────────────────
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  const idx = name === 'home' ? 0 : 1;
+  document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── TOAST ───────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  clearTimeout(toastTimer);
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── RANGE TABS ──────────────────────────────────────────
+function setRange(el, days) {
+  document.querySelectorAll('.range-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  updateCharts(days);
+}
+
+// ─── CHARTS ──────────────────────────────────────────────
+let timelineChart, devicesChart, browsersChart;
+
+Chart.defaults.color = '#666680';
+Chart.defaults.borderColor = '#2a2a3a';
+Chart.defaults.font.family = "'Space Mono', monospace";
+
+function generateTimeline(days) {
+  const labels = [], data = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString('en', { month: 'short', day: 'numeric' }));
+    const base = 300 + Math.sin(i * 0.3) * 150;
+    data.push(Math.round(base + Math.random() * 200));
+  }
+  return { labels, data };
+}
+
+function initCharts() {
+  // Timeline
+  const tl = generateTimeline(30);
+  const tlCtx = document.getElementById('timelineChart').getContext('2d');
+  const grad = tlCtx.createLinearGradient(0, 0, 0, 300);
+  grad.addColorStop(0, 'rgba(124,107,255,0.3)');
+  grad.addColorStop(1, 'rgba(124,107,255,0)');
+
+  timelineChart = new Chart(tlCtx, {
+    type: 'line',
+    data: {
+      labels: tl.labels,
+      datasets: [{
+        data: tl.data,
+        borderColor: '#7c6bff',
+        borderWidth: 2,
+        backgroundColor: grad,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: '#7c6bff',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: '#111118',
+        borderColor: '#2a2a3a',
+        borderWidth: 1,
+        padding: 10,
+        callbacks: { label: ctx => ` ${ctx.parsed.y} clicks` }
+      }},
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { size: 10 } } },
+        y: { grid: { color: '#1a1a24' }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+
+  // Devices doughnut
+  const dCtx = document.getElementById('devicesChart').getContext('2d');
+  devicesChart = new Chart(dCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Desktop', 'Mobile', 'Tablet'],
+      datasets: [{
+        data: [58, 36, 6],
+        backgroundColor: ['#7c6bff', '#ff6b9d', '#6bffce'],
+        borderWidth: 0,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '68%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { padding: 16, font: { size: 11 }, usePointStyle: true, pointStyleWidth: 8 }
+        },
+        tooltip: {
+          backgroundColor: '#111118', borderColor: '#2a2a3a', borderWidth: 1,
+          callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}%` }
+        }
+      }
+    }
+  });
+
+  // Browsers bar chart
+  const bCtx = document.getElementById('browsersChart').getContext('2d');
+  browsersChart = new Chart(bCtx, {
+    type: 'bar',
+    data: {
+      labels: browsers.map(b => b.name),
+      datasets: [{
+        data: browsers.map(b => b.pct),
+        backgroundColor: browsers.map(b => b.color),
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor: '#111118', borderColor: '#2a2a3a', borderWidth: 1,
+          callbacks: { label: ctx => ` ${ctx.parsed.y}%` }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { display: false }
+      }
+    }
+  });
+
+  renderCountries();
+  renderBrowserBars();
+  renderReferers();
+  renderMapDots();
+}
+
+function updateCharts(days) {
+  const tl = generateTimeline(days);
+  timelineChart.data.labels = tl.labels;
+  timelineChart.data.datasets[0].data = tl.data;
+  timelineChart.update();
+
+  const mul = days / 30;
+  document.getElementById('statClicks').textContent = Math.round(12847 * mul).toLocaleString();
+  document.getElementById('statUniq').textContent = Math.round(4219 * mul).toLocaleString();
+}
+
+function renderCountries() {
+  document.getElementById('countriesList').innerHTML = countries.map(c => `
+    <div class="bar-item">
+      <span class="bar-label" style="font-size:12px;">${c.name}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${c.pct}%; background:var(--accent);"></div>
+      </div>
+      <span class="bar-count">${c.n.toLocaleString()}</span>
+    </div>
+  `).join('');
+}
+
+function renderBrowserBars() {
+  document.getElementById('browsersList').innerHTML = browsers.map(b => `
+    <div class="bar-item">
+      <span class="bar-label" style="font-size:12px;">${b.name}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${b.pct}%; background:${b.color};"></div>
+      </div>
+      <span class="bar-count">${b.pct}%</span>
+    </div>
+  `).join('');
+}
+
+function renderReferers() {
+  const max = Math.max(...referers.map(r => r.n));
+  document.getElementById('referersList').innerHTML = referers.map(r => `
+    <div class="bar-item">
+      <span class="bar-label" style="font-size:12px; min-width:110px;">${r.name}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${Math.round(r.n/max*100)}%; background:var(--accent2);"></div>
+      </div>
+      <span class="bar-count">${r.n.toLocaleString()}</span>
+    </div>
+  `).join('');
+}
+
+function renderMapDots() {
+  const container = document.getElementById('mapDots');
+  container.innerHTML = mapDotPositions.map((p, i) => `
+    <div class="map-dot" style="top:${p.top}; left:${p.left}; animation-delay:${i*0.4}s;"></div>
+  `).join('');
+}
+
+// Enter key to shorten
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') shorten();
+});
+
+// Init
+renderLinks();
+initCharts();
+</script>
+</body>
+</html>
